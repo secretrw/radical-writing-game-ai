@@ -258,6 +258,26 @@ function normalizeGeminiDecision(raw, currentRadicalForJudge) {
   return { decision, word, confidence, reason };
 }
 
+function parseGeminiJson(text) {
+  const raw = String(text || '').trim();
+  if (!raw) throw new Error('Gemini 回傳空內容。');
+  const unfenced = raw
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+
+  try {
+    return JSON.parse(unfenced);
+  } catch (firstErr) {
+    const start = unfenced.indexOf('{');
+    const end = unfenced.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      return JSON.parse(unfenced.slice(start, end + 1));
+    }
+    throw firstErr;
+  }
+}
+
 async function judgeAnswerWithGemini({ imageDataUrl, studentName }) {
   const image = parseCanvasDataUrl(imageDataUrl);
   const ai = await getGeminiClient();
@@ -270,7 +290,8 @@ async function judgeAnswerWithGemini({ imageDataUrl, studentName }) {
     '通過條件：你能辨識出一個單一繁體中文漢字，且它符合目前題目/部首，且沒有出現在已用過的字。',
     '如果畫得太亂、不是單一中文字、看不清楚、不符合題目/部首、或已經用過，請判定 retry。',
     '不要因為筆跡不漂亮就退回；只要能清楚辨識且符合題目即可 pass。',
-    'word 欄位只填辨識出的單一中文字；若看不出來請填空字串。reason 用繁體中文，簡短說明。'
+    'word 欄位只填辨識出的單一中文字；若看不出來請填空字串。reason 用繁體中文，簡短說明。',
+    '只輸出 JSON 物件本身，不要使用 ```json 或 Markdown code block。'
   ].join('\n');
 
   const response = await ai.models.generateContent({
@@ -301,7 +322,7 @@ async function judgeAnswerWithGemini({ imageDataUrl, studentName }) {
     }
   });
 
-  const parsed = JSON.parse(response.text || '{}');
+  const parsed = parseGeminiJson(response.text);
   const normalized = normalizeGeminiDecision(parsed, currentRadical);
   if (normalized.decision === 'pass' && (!normalized.word || usedWords.includes(normalized.word))) {
     return {
