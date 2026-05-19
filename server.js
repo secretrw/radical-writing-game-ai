@@ -20,7 +20,9 @@ app.use(express.static(__dirname));
 // 5. 老師端密碼保護
 const TEACHER_KEY = process.env.TEACHER_KEY || "1234";
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-2.0-flash";
 const AI_RETRY_DELAY_MS = 1800;
+const GEMINI_RETRY_DELAYS_MS = [1200, 2500];
 
 // 2. 難度分級：部首題目庫
 const RADICAL_BANK = {
@@ -278,6 +280,39 @@ function parseGeminiJson(text) {
   }
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isRetryableGeminiError(err) {
+  const status = err?.status || err?.code || err?.error?.code;
+  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+async function generateGeminiContentWithRetry(ai, request) {
+  const models = [GEMINI_MODEL, GEMINI_MODEL, GEMINI_FALLBACK_MODEL].filter(Boolean);
+  let lastErr = null;
+  for (let attempt = 0; attempt < models.length; attempt++) {
+    const model = models[attempt];
+    try {
+      if (attempt > 0) {
+        await sleep(GEMINI_RETRY_DELAYS_MS[Math.min(attempt - 1, GEMINI_RETRY_DELAYS_MS.length - 1)]);
+      }
+      return {
+        response: await ai.models.generateContent({ ...request, model }),
+        model
+      };
+    } catch (err) {
+      lastErr = err;
+      if (!isRetryableGeminiError(err) || attempt === models.length - 1) {
+        throw err;
+      }
+      console.warn(`Gemini 模型暫時不可用，準備重試：${model}`, err?.message || err);
+    }
+  }
+  throw lastErr;
+}
+
 async function judgeAnswerWithGemini({ imageDataUrl, studentName }) {
   const image = parseCanvasDataUrl(imageDataUrl);
   const ai = await getGeminiClient();
@@ -294,8 +329,7 @@ async function judgeAnswerWithGemini({ imageDataUrl, studentName }) {
     '只輸出 JSON 物件本身，不要使用 ```json 或 Markdown code block。'
   ].join('\n');
 
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
+  const { response, model: usedModel } = await generateGeminiContentWithRetry(ai, {
     contents: [{
       parts: [
         { text: prompt },
@@ -324,6 +358,7 @@ async function judgeAnswerWithGemini({ imageDataUrl, studentName }) {
 
   const parsed = parseGeminiJson(response.text);
   const normalized = normalizeGeminiDecision(parsed, currentRadical);
+  normalized.model = usedModel;
   if (normalized.decision === 'pass' && (!normalized.word || usedWords.includes(normalized.word))) {
     return {
       ...normalized,
@@ -402,7 +437,7 @@ io.on('connection', (socket) => {
         ...result,
         studentName: currentName,
         radical: currentRadical,
-        model: GEMINI_MODEL
+        model: result.model || GEMINI_MODEL
       });
 
       if (result.decision === 'pass') {
