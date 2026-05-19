@@ -330,6 +330,19 @@
       ctx.lineJoin = 'round';
     }
     setupCanvasHiDPI();
+    let canvasRenderToken = 0;
+
+    function clearCanvasPixels() {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
+
+    function clearGameCanvas() {
+      canvasRenderToken++;
+      clearCanvasPixels();
+    }
 
     let isDrawing = false; let lastX = 0; let lastY = 0;
     let isMyTurn = false; let isTimeUp = false; let isPaused = false;
@@ -380,9 +393,11 @@
     });
 
     socket.on('syncCanvas', (dataURL) => {
+      const token = ++canvasRenderToken;
       const img = new Image();
       img.onload = () => {
-        ctx.clearRect(0, 0, CSS_CANVAS_SIZE, CSS_CANVAS_SIZE);
+        if (token !== canvasRenderToken) return;
+        clearCanvasPixels();
         ctx.drawImage(img, 0, 0, CSS_CANVAS_SIZE, CSS_CANVAS_SIZE);
       };
       img.src = dataURL;
@@ -457,7 +472,7 @@
     });
 
     socket.on('clearCanvas', () => { 
-      ctx.clearRect(0, 0, CSS_CANVAS_SIZE, CSS_CANVAS_SIZE); 
+      clearGameCanvas(); 
       if(isMyTurn) strokeHistory = [];
     });
 
@@ -506,7 +521,7 @@
     btnClear.addEventListener('click', () => { 
       if (!isMyTurn || isTimeUp || isPaused) return;
       saveState(); 
-      ctx.clearRect(0, 0, CSS_CANVAS_SIZE, CSS_CANVAS_SIZE);
+      clearGameCanvas();
       socket.emit('clearCanvas'); 
     });
     
@@ -514,9 +529,11 @@
       if (!isMyTurn || isTimeUp || isPaused) return;
       if (strokeHistory.length > 0) {
         const prevState = strokeHistory.pop();
+        const token = ++canvasRenderToken;
         const img = new Image();
         img.onload = () => {
-          ctx.clearRect(0, 0, CSS_CANVAS_SIZE, CSS_CANVAS_SIZE);
+          if (token !== canvasRenderToken) return;
+          clearCanvasPixels();
           ctx.drawImage(img, 0, 0, CSS_CANVAS_SIZE, CSS_CANVAS_SIZE);
           socket.emit('syncCanvas', canvas.toDataURL());
         };

@@ -472,6 +472,19 @@
       ctx.lineJoin = 'round';
     }
     setupCanvasHiDPI();
+    let canvasRenderToken = 0;
+
+    function clearCanvasPixels() {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
+
+    function clearGameCanvas() {
+      canvasRenderToken++;
+      clearCanvasPixels();
+    }
 
     // 字典即時更新
     wordInput.addEventListener('input', (e) => {
@@ -544,15 +557,17 @@
     });
 
     socket.on('syncCanvas', (dataURL) => {
+      const token = ++canvasRenderToken;
       const img = new Image();
       img.onload = () => {
-        ctx.clearRect(0, 0, CSS_CANVAS_SIZE, CSS_CANVAS_SIZE);
+        if (token !== canvasRenderToken) return;
+        clearCanvasPixels();
         ctx.drawImage(img, 0, 0, CSS_CANVAS_SIZE, CSS_CANVAS_SIZE);
       };
       img.src = dataURL;
     });
 
-    socket.on('clearCanvas', () => { ctx.clearRect(0, 0, CSS_CANVAS_SIZE, CSS_CANVAS_SIZE); });
+    socket.on('clearCanvas', clearGameCanvas);
 
     socket.on('gameState', (data) => {
       // [新增] 切換大廳/遊戲面板
