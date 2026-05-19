@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>部首大擂台</title>
+  <style>
+    body { text-align: center; font-family: "微軟正黑體", sans-serif; background-color: #f4f4f9; margin: 0; padding: 10px; overflow-x: hidden; }
+    .main-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; max-width: 900px; margin: 0 auto; }
+    .game-area { flex: 1; min-width: 400px; }
+    .info-area { flex: 1; min-width: 250px; background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    #statusArea { margin-bottom: 10px; padding: 10px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    h2, h3 { margin: 5px 0; }
+    .radical-title { font-size: 2em; color: #673ab7; font-weight: bold; margin: 10px 0; }
+    .word-cloud { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 10px; }
+    .word-tag { background: #e0f7fa; color: #006064; padding: 8px 15px; font-size: 1.5em; border-radius: 5px; font-weight: bold; border: 1px solid #b2ebf2; }
+    
+    /* 3. 環形計時器樣式 */
+    .timer-container { position: relative; width: 100px; height: 100px; margin: 0 auto; }
+    .timer-svg { transform: rotate(-90deg); }
+    .timer-bg { fill: none; stroke: #eee; stroke-width: 8; }
+    .timer-bar { fill: none; stroke: #4caf50; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 1s linear, stroke 0.3s; }
+    #timerDisplay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 28px; font-weight: bold; color: #333; }
+    .timer-danger { color: #f44336 !important; animation: blink 0.5s infinite; }
+    
+    .turn-alert { color: #d32f2f; font-weight: bold; font-size: 1.2em; animation: blink 1.5s infinite; }
+    .spectator-alert { color: #1976d2; font-weight: bold; font-size: 1.1em; }
+    
+    /* 畫布樣式 */
+    #gameCanvas { background-color: white; border: 4px solid #ccc; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); touch-action: none; transition: all 0.3s ease; cursor: crosshair; }
+    .controls { margin-top: 15px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; }
+    button { font-size: 16px; padding: 10px 15px; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; font-weight: bold; }
+    .btn-clear { background-color: #ff9800; color: white; }
+    .btn-undo { background-color: #607d8b; color: white; }
+    .btn-submit { background-color: #4caf50; color: white; font-size: 18px; }
+    button:disabled { background-color: #e0e0e0; color: #9e9e9e; cursor: not-allowed; }
+    .tool-group { background: #eee; padding: 8px 15px; border-radius: 8px; display: flex; align-items: center; gap: 10px; }
+    
+    @keyframes blink { 50% { opacity: 0.5; } }
+
+    /* 原有烏鴉動畫容器 */
+    .crows-wrapper { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; pointer-events: none; }
+    .anime-crow-container { position: absolute; right: 15%; transform: translateY(-50%); opacity: 0; animation: flyAcross 2.2s linear forwards; }
+    .crow-1 { top: 40%; animation-delay: 0s; transform: translateY(-50%) scale(1.1); }
+    .crow-2 { top: 60%; animation-delay: 0.3s; transform: translateY(-50%) scale(0.7); }
+    .crow-3 { top: 30%; animation-delay: 0.7s; transform: translateY(-50%) scale(0.9); }
+    .anime-crow-svg { filter: drop-shadow(4px 6px 5px rgba(0,0,0,0.4)); animation: glideBob 1.5s ease-in-out infinite alternate; }
+    @keyframes flyAcross { 0% { right: 15%; opacity: 0; } 15% { right: 25%; opacity: 1; } 85% { right: 75%; opacity: 1; } 100% { right: 85%; opacity: 0; } }
+    @keyframes glideBob { 0% { margin-top: 0; } 50% { margin-top: -15px; } 100% { margin-top: 15px; } }
+
+    /* 7. 失敗動畫樣式 */
+    .fail-text-wa { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 120px; color: #f44336; font-weight: 900; z-index: 10000; pointer-events: none; opacity: 0; text-shadow: 4px 4px 0 #fff, -4px -4px 0 #fff; }
+    @keyframes waShake { 0%, 100% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -50%) scale(1.3) rotate(10deg); opacity: 1; } }
+    
+    /* [修改] 閃電全屏遮罩（保留，不再用作主要閃電動畫） */
+    .lightning-flash { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.9); opacity: 0; z-index: 9999; pointer-events: none; }
+    @keyframes flashFx { 0%, 20%, 40% { opacity: 1; } 10%, 30%, 100% { opacity: 0; } }
+
+    /* [新增] 可見閃電劈下動畫 */
+    .lightning-bolt-wrapper {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 10001; pointer-events: none; overflow: hidden;
+    }
+    .lightning-bolt-svg {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      opacity: 0;
+      filter: drop-shadow(0 0 18px #ffe066) drop-shadow(0 0 40px #ffcc00);
+      animation: boltStrike 0.9s forwards;
+    }
+    @keyframes boltStrike {
+      0%   { opacity: 0;   transform: translateX(-50%) scaleY(0);   transform-origin: top center; }
+      8%   { opacity: 1;   transform: translateX(-50%) scaleY(1);   transform-origin: top center; }
+      18%  { opacity: 0.6; }
+      28%  { opacity: 1;   filter: drop-shadow(0 0 30px #fff) drop-shadow(0 0 60px #ffcc00); }
+      45%  { opacity: 0.3; }
+      60%  { opacity: 0.8; }
+      80%  { opacity: 0.1; }
+      100% { opacity: 0;   transform: translateX(-50%) scaleY(1); }
+    }
+    /* 閃電背景閃白 */
+    .lightning-bg-flash {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(255,255,230,0.85); z-index: 10000;
+      pointer-events: none; opacity: 0;
+      animation: bgFlashFx 0.9s forwards;
+    }
+    @keyframes bgFlashFx {
+      0%  { opacity: 0; }
+      8%  { opacity: 1; }
+      20% { opacity: 0; }
+      30% { opacity: 0.7; }
+      45% { opacity: 0; }
+      60% { opacity: 0.4; }
+      80% { opacity: 0; }
+    }
+
+
+    /* [新增] 冠軍慶祝覆蓋層 */
+    #winnerOverlay {
+      display: none; position: fixed; inset: 0; z-index: 20000;
+      background: radial-gradient(ellipse at center, #1a0533 0%, #000 100%);
+      flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; overflow: hidden; padding: 20px; box-sizing: border-box;
+    }
+    #winnerOverlay.active { display: flex; }
+    .winner-crown-s { font-size: 80px; animation: crownBounceS 0.8s ease-in-out infinite alternate; }
+    @keyframes crownBounceS { from{transform:translateY(0) scale(1);} to{transform:translateY(-15px) scale(1.08);} }
+    .winner-title-s { font-size: 1.6em; color: #ffd700; letter-spacing: 0.15em; margin: 8px 0; animation: shimmerS 1.5s infinite; }
+    @keyframes shimmerS { 0%,100%{text-shadow:0 0 20px #ffd700;} 50%{text-shadow:0 0 40px #fff,0 0 80px #ffd700;} }
+    .winner-name-s { font-size: 3em; font-weight: 900; color: white; margin: 10px 0; text-shadow: 3px 3px 0 #b8860b; animation: nameScaleS 1s ease-in-out infinite alternate; }
+    @keyframes nameScaleS { from{transform:scale(1);} to{transform:scale(1.05);} }
+    .winner-subtitle-s { font-size: 1.1em; color: #a8edea; margin: 5px 0 20px; }
+    .winner-wait-msg { font-size: 0.95em; color: #b0bec5; margin-top: 20px; animation: blink 1.5s infinite; }
+    .countdown-overlay {
+      position: fixed; inset: 0; z-index: 25000;
+      display: none; align-items: center; justify-content: center;
+      background: radial-gradient(circle, rgba(255,245,220,0.95), rgba(16,24,32,0.92));
+      pointer-events: none;
+    }
+    .countdown-overlay.active { display: flex; }
+    .countdown-number {
+      min-width: 180px; text-align: center;
+      font-size: 7.5rem; line-height: 1; font-weight: 1000;
+      color: #fff; text-shadow: 0 7px 0 #e65100, 0 0 32px rgba(255,143,0,0.95);
+      animation: countdownPop 0.85s ease-out both;
+    }
+    .countdown-number.go {
+      font-size: 5.8rem; color: #76ff03;
+      text-shadow: 0 7px 0 #1b5e20, 0 0 38px rgba(118,255,3,0.95);
+    }
+    @keyframes countdownPop {
+      0% { opacity: 0; transform: scale(0.45) rotate(-8deg); }
+      35% { opacity: 1; transform: scale(1.15) rotate(2deg); }
+      100% { opacity: 0; transform: scale(0.86) rotate(0); }
+    }
+    /* [新增] 等待大廳畫面 */
+    #lobbyScreen {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 60vh; padding: 30px;
+    }
+    #lobbyScreen h2 { font-size: 2em; color: #673ab7; margin-bottom: 10px; }
+    #lobbyWaitMsg { font-size: 1.2em; color: #555; margin-bottom: 20px; }
+    #lobbyPlayerList { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin: 15px 0; }
+    .lobby-player-tag {
+      background: #e8f5e9; color: #2e7d32; border: 2px solid #81c784;
+      padding: 10px 20px; border-radius: 30px; font-size: 1.2em; font-weight: bold;
+    }
+    .lobby-player-tag.offline { background: #fafafa; color: #aaa; border-color: #ccc; }
+  </style>
+</head>
+<body>
+
+  <!-- [新增] 等待大廳畫面 -->
+  <div id="lobbyScreen">
+    <h2>🏆 部首大擂台</h2>
+    <div id="lobbyWaitMsg">等待老師開始遊戲...</div>
+    <div>目前已加入的玩家：</div>
+    <div id="lobbyPlayerList"></div>
+    <div style="margin-top:20px; color:#888; font-size:0.95em;">請等待老師按下「開始遊戲」</div>
+  </div>
+
+  <!-- 遊戲主畫面（初始隱藏） -->
+  <div id="gameScreen" style="display:none;">
+    <div id="statusArea">
+      <h2>部首大擂台</h2>
+      
+      <div class="timer-container">
+        <svg class="timer-svg" width="100" height="100">
+          <circle class="timer-bg" cx="50" cy="50" r="40"></circle>
+          <circle id="timerBar" class="timer-bar" cx="50" cy="50" r="40"></circle>
+        </svg>
+        <div id="timerDisplay">15</div>
+      </div>
+      
+      <div id="turnStatus">等待伺服器分配...</div>
+    </div>
+
+    <div class="main-container">
+      <div class="game-area">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- [修改] 筆刷+復原 一排；清除+寫好了 同一排 -->
+        <div class="controls">
+          <div class="tool-group">
+            <label for="brushSize">筆刷粗細:</label>
+            <input type="range" id="brushSize" min="2" max="15" value="4">
+          </div>
+          <button id="btnUndo" class="btn-undo" disabled>↩️ 復原</button>
+        </div>
+        <div class="controls">
+          <button id="btnClear"  class="btn-clear"  disabled>🗑️ 清除</button>
+          <button id="btnSubmit" class="btn-submit" disabled>✨ 寫好了！</button>
+        </div>
+      </div>
+      
+      <div class="info-area">
+        <div>目前指定題目</div>
+        <div class="radical-title" id="radicalDisplay">【 水 】部</div>
+        <hr>
+        <div style="font-weight: bold; color: #ff5722;">🌟 已上榜字庫 (不可重複)</div>
+        <div class="word-cloud" id="wordHistory"></div>
+        
+        <div style="margin-top: 20px; text-align: left; background: #fafafa; padding: 10px; border-radius: 8px;">
+          <label for="volControl" style="font-size: 0.9em; color: #555;">🔊 學生端音量:</label>
+          <input type="range" id="volControl" min="0" max="1" step="0.1" value="0.5" style="width: 100%;">
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- [新增] 冠軍慶祝覆蓋層（學生端） -->
+  <div id="winnerOverlay">
+    <div class="winner-crown-s">🏆</div>
+    <div class="winner-title-s">🎉 最後的生存者 🎉</div>
+    <div class="winner-name-s" id="winnerNameDisplay">—</div>
+    <div class="winner-subtitle-s">恭喜勝出！部首大擂台冠軍！</div>
+    <div class="winner-wait-msg">⏳ 等待老師重新開始下一場...</div>
+  </div>
+  <div id="countdownOverlay" class="countdown-overlay">
+    <div id="countdownText" class="countdown-number">3</div>
+  </div>
+  <div id="failWa" class="fail-text-wa">哇哇哇！</div>
+  <div id="lightning" class="lightning-flash"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    // [修改] 每次開啟頁面都重新詢問姓名（不同學生共用同一台電腦）
+    function askForName() {
+      let name = "";
+      while (!name) {
+        const input = prompt("👋 請輸入你的姓名：");
+        if (input === null) {
+          document.body.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:微軟正黑體,sans-serif;color:#555;text-align:center;">請重新整理頁面並輸入姓名後加入遊戲</div>';
+          return "";
+        }
+        name = input.trim();
+      }
+      return name;
+    }
+    let studentName = askForName();
+    if (!studentName) {
+      throw new Error("Student name is required.");
+    }
+
+    const socket = io({ query: { role: 'student', name: studentName } });
+
+    const lobbyScreen = document.getElementById('lobbyScreen');
+    const gameScreen = document.getElementById('gameScreen');
+    const lobbyPlayerList = document.getElementById('lobbyPlayerList');
+
+    // ── 等待大廳玩家列表更新 ──
+    function updateLobbyList(playerOrder, playersMap) {
+      lobbyPlayerList.innerHTML = "";
+      if (playerOrder.length === 0) {
+        lobbyPlayerList.innerHTML = '<span style="color:#aaa;">尚無玩家加入</span>';
+        return;
+      }
+      playerOrder.forEach(name => {
+        const tag = document.createElement('div');
+        tag.className = 'lobby-player-tag' + (playersMap[name] ? '' : ' offline');
+        tag.textContent = (playersMap[name] ? '🟢 ' : '🔴 ') + name;
+        lobbyPlayerList.appendChild(tag);
+      });
+    }
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const btnClear = document.getElementById('btnClear');
+    const btnUndo = document.getElementById('btnUndo');
+    const btnSubmit = document.getElementById('btnSubmit');
+    const turnStatusText = document.getElementById('turnStatus');
+    const timerDisplay = document.getElementById('timerDisplay');
+    const radicalDisplay = document.getElementById('radicalDisplay');
+    const wordHistory = document.getElementById('wordHistory');
+    const brushSizeSlider = document.getElementById('brushSize');
+    const timerBar = document.getElementById('timerBar');
+    const countdownOverlay = document.getElementById('countdownOverlay');
+    const countdownText = document.getElementById('countdownText');
+    let countdownRunId = 0;
+    
+    // 環形計時器設定
+    const timerRadius = 40;
+    const timerCircumference = 2 * Math.PI * timerRadius;
+    timerBar.style.strokeDasharray = timerCircumference;
+
+    function renderTimer(timeLeft) {
+      timerDisplay.innerText = timeLeft;
+      const offset = timerCircumference - (timeLeft / maxTime) * timerCircumference;
+      timerBar.style.strokeDashoffset = offset;
+      if (timeLeft <= 5) {
+        timerDisplay.classList.add('timer-danger');
+        timerBar.style.stroke = "#f44336";
+      } else {
+        timerDisplay.classList.remove('timer-danger');
+        timerBar.style.stroke = "#4caf50";
+      }
+    }
+
+    function resetTimerDisplay() {
+      timerDisplay.innerText = "--";
+      timerDisplay.classList.remove('timer-danger');
+      timerBar.style.stroke = "#b0bec5";
+      timerBar.style.strokeDashoffset = timerCircumference;
+    }
+
+    function setWritingControlsEnabled(enabled) {
+      btnClear.disabled = !enabled;
+      btnSubmit.disabled = !enabled;
+      btnUndo.disabled = !enabled;
+    }
+    resetTimerDisplay();
+
+    // 6. HiDPI 畫布解析度優化
+    const CSS_CANVAS_SIZE = 400;
+    function setupCanvasHiDPI() {
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = CSS_CANVAS_SIZE * ratio;
+      canvas.height = CSS_CANVAS_SIZE * ratio;
+      canvas.style.width = CSS_CANVAS_SIZE + "px";
+      canvas.style.height = CSS_CANVAS_SIZE + "px";
+      ctx.scale(ratio, ratio);
+      ctx.strokeStyle = '#212121'; 
+      ctx.lineWidth = brushSizeSlider.value; 
+      ctx.lineCap = 'round'; 
+      ctx.lineJoin = 'round';
+    }
+    setupCanvasHiDPI();
+
+    let isDrawing = false; let lastX = 0; let lastY = 0;
+    let isMyTurn = false; let isTimeUp = false; let isPaused = false;
+    let maxTime = 15;
+    let strokeHistory = []; 
+
+    brushSizeSlider.addEventListener('input', (e) => { ctx.lineWidth = e.target.value; });
+
+    function getCoordinates(e) {
+      const rect = canvas.getBoundingClientRect();
+      let clientX = e.clientX; let clientY = e.clientY;
+      if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+      return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+
+    function saveState() {
+      strokeHistory.push(canvas.toDataURL());
+      if (strokeHistory.length > 15) strokeHistory.shift(); 
+    }
+
+    function startDrawing(e) {
+      if (!isMyTurn || isTimeUp || isPaused) return; 
+      e.preventDefault(); 
+      saveState(); 
+      isDrawing = true;
+      const pos = getCoordinates(e); lastX = pos.x; lastY = pos.y;
+    }
+
+    function draw(e) {
+      if (!isDrawing || !isMyTurn || isTimeUp || isPaused) return;
+      e.preventDefault(); const pos = getCoordinates(e);
+      ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(pos.x, pos.y); ctx.stroke();
+      socket.emit('drawing', { x0: lastX, y0: lastY, x1: pos.x, y1: pos.y, width: ctx.lineWidth });
+      lastX = pos.x; lastY = pos.y;
+    }
+
+    function stopDrawing() { isDrawing = false; }
+
+    canvas.addEventListener('mousedown', startDrawing); canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDrawing); canvas.addEventListener('mouseout', stopDrawing);
+    canvas.addEventListener('touchstart', startDrawing, { passive: false }); canvas.addEventListener('touchmove', draw, { passive: false }); canvas.addEventListener('touchend', stopDrawing);
+
+    socket.on('drawing', (data) => {
+      const prevWidth = ctx.lineWidth;
+      ctx.lineWidth = data.width || 4; 
+      ctx.beginPath(); ctx.moveTo(data.x0, data.y0); ctx.lineTo(data.x1, data.y1); ctx.stroke();
+      ctx.lineWidth = prevWidth; 
+    });
+
+    socket.on('syncCanvas', (dataURL) => {
+      const img = new Image();
+      img.onload = () => {
+        ctx.clearRect(0, 0, CSS_CANVAS_SIZE, CSS_CANVAS_SIZE);
+        ctx.drawImage(img, 0, 0, CSS_CANVAS_SIZE, CSS_CANVAS_SIZE);
+      };
+      img.src = dataURL;
+    });
+
+    socket.on('gameState', (data) => {
+      // [新增] 依 gameStarted 切換大廳/遊戲畫面
+      if (!data.gameStarted) {
+        lobbyScreen.style.display = 'flex';
+        gameScreen.style.display = 'none';
+        updateLobbyList(data.playerOrder, data.playersMap);
+        // 重置後不自動把仍開著的舊學生頁面加回名單，避免幽靈學生。
+        // 要重新加入時，請重新整理學生頁面，由新的 connection 登記。
+        return;
+      }
+
+      // 遊戲進行中
+      lobbyScreen.style.display = 'none';
+      gameScreen.style.display = 'block';
+
+      const turnPhase = data.turnPhase || (data.timerRunning ? 'running' : 'waiting');
+      const isCurrentPlayer = (studentName === data.currentName);
+      isMyTurn = isCurrentPlayer && turnPhase === 'running';
+      isTimeUp = turnPhase === 'timeUp';
+      isPaused = turnPhase === 'paused';
+      maxTime = data.defaultTime;
+      if (turnPhase === 'waiting' || turnPhase === 'countdown') {
+        resetTimerDisplay();
+      } else if (typeof data.timeLeft === 'number') {
+        renderTimer(turnPhase === 'timeUp' ? 0 : data.timeLeft);
+      }
+      
+      radicalDisplay.innerText = `【 ${data.currentRadical} 】部`;
+      wordHistory.innerHTML = "";
+      data.usedWords.forEach(word => {
+        const span = document.createElement('span'); span.className = 'word-tag'; span.innerText = word;
+        wordHistory.appendChild(span);
+      });
+      
+      if (isMyTurn) {
+        strokeHistory = []; 
+        turnStatusText.innerHTML = `<div class="turn-alert">✏️ 輪到你了！請寫字 (${studentName})</div>`;
+        canvas.style.borderColor = "#f44336"; canvas.style.backgroundColor = "#ffffff";
+        setWritingControlsEnabled(true);
+        btnSubmit.innerText = "✨ 寫好了！(暫停計時)";
+      } else {
+        const pName = data.currentName ? data.currentName : '無';
+        if (isCurrentPlayer && turnPhase === 'countdown') {
+          turnStatusText.innerHTML = `<div class="spectator-alert">🔥 準備開始，倒數中...</div>`;
+          canvas.style.borderColor = "#ff6f00"; canvas.style.backgroundColor = "#fff3e0";
+        } else if (isCurrentPlayer && turnPhase === 'waiting') {
+          turnStatusText.innerHTML = `<div class="spectator-alert">⏳ 輪到你了，等待老師按「開始計時」</div>`;
+          canvas.style.borderColor = "#ff9800"; canvas.style.backgroundColor = "#fff8e1";
+        } else if (isCurrentPlayer && turnPhase === 'paused') {
+          turnStatusText.innerHTML = `<div class="spectator-alert">⏸️ 已暫停，等待老師輸入字庫...</div>`;
+          canvas.style.borderColor = "#9e9e9e"; canvas.style.backgroundColor = "#eeeeee";
+        } else if (isCurrentPlayer && turnPhase === 'timeUp') {
+          turnStatusText.innerHTML = `<div class="turn-alert" style="color: black;">⏳ 時間到！等待老師判定</div>`;
+          canvas.style.borderColor = "#000000"; canvas.style.backgroundColor = "#eeeeee";
+        } else if (data.currentName && turnPhase === 'countdown') {
+          turnStatusText.innerHTML = `<div class="spectator-alert">🔥 即將開始，倒數中...</div>`;
+          canvas.style.borderColor = "#ff6f00"; canvas.style.backgroundColor = "#fff3e0";
+        } else if (data.currentName && turnPhase === 'waiting') {
+          turnStatusText.innerHTML = `<div class="spectator-alert">⏳ 等待老師開始計時，下一位：${pName}</div>`;
+          canvas.style.borderColor = "#ff9800"; canvas.style.backgroundColor = "#fff8e1";
+        } else {
+          turnStatusText.innerHTML = `<div class="spectator-alert">👀 觀戰中... 等待玩家 ${pName} 書寫</div>`;
+          canvas.style.borderColor = "#2196f3"; canvas.style.backgroundColor = "#f0f8ff";
+        }
+        setWritingControlsEnabled(false);
+      }
+    });
+
+    socket.on('clearCanvas', () => { 
+      ctx.clearRect(0, 0, CSS_CANVAS_SIZE, CSS_CANVAS_SIZE); 
+      if(isMyTurn) strokeHistory = [];
+    });
+
+    socket.on('timeUpdate', (timeLeft) => {
+      renderTimer(timeLeft);
+    });
+
+    socket.on('countdownStart', (data) => {
+      isTimeUp = false;
+      isPaused = true;
+      setWritingControlsEnabled(false);
+      resetTimerDisplay();
+      showCountdownSequence(data);
+    });
+
+    socket.on('timeUp', () => {
+      isTimeUp = true; timerDisplay.innerText = "0"; timerDisplay.classList.remove('timer-danger');
+      if (isMyTurn) {
+        turnStatusText.innerHTML = `<div class="turn-alert" style="color: black;">⏳ 時間到！等待老師判定</div>`;
+        canvas.style.borderColor = "#000000"; canvas.style.backgroundColor = "#eeeeee";
+        setWritingControlsEnabled(false);
+      }
+    });
+
+    socket.on('timerPaused', () => {
+      isPaused = true;
+      if (isMyTurn) {
+        turnStatusText.innerHTML = `<div class="spectator-alert">⏸️ 已暫停，等待老師輸入字庫...</div>`;
+        canvas.style.borderColor = "#9e9e9e"; canvas.style.backgroundColor = "#eeeeee";
+        setWritingControlsEnabled(false);
+      }
+    });
+
+    socket.on('timerResumed', () => {
+      isPaused = false;
+      if (isMyTurn && !isTimeUp) {
+        turnStatusText.innerHTML = `<div class="turn-alert">⚠️ 老師退回！趕快修改！</div>`;
+        canvas.style.borderColor = "#ff9800"; canvas.style.backgroundColor = "#ffffff";
+        setWritingControlsEnabled(true);
+        btnSubmit.innerText = "✨ 修改好了！(暫停計時)";
+      } else {
+        turnStatusText.innerHTML = `<div class="spectator-alert">👀 觀戰中... 玩家正在搶救重寫</div>`;
+      }
+    });
+
+    btnClear.addEventListener('click', () => { 
+      if (!isMyTurn || isTimeUp || isPaused) return;
+      saveState(); 
+      ctx.clearRect(0, 0, CSS_CANVAS_SIZE, CSS_CANVAS_SIZE);
+      socket.emit('clearCanvas'); 
+    });
+    
+    btnUndo.addEventListener('click', () => {
+      if (!isMyTurn || isTimeUp || isPaused) return;
+      if (strokeHistory.length > 0) {
+        const prevState = strokeHistory.pop();
+        const img = new Image();
+        img.onload = () => {
+          ctx.clearRect(0, 0, CSS_CANVAS_SIZE, CSS_CANVAS_SIZE);
+          ctx.drawImage(img, 0, 0, CSS_CANVAS_SIZE, CSS_CANVAS_SIZE);
+          socket.emit('syncCanvas', canvas.toDataURL());
+        };
+        img.src = prevState;
+      }
+    });
+
+    btnSubmit.addEventListener('click', () => { 
+      if (isMyTurn && !isTimeUp && !isPaused) {
+        socket.emit('studentDone', { imageDataUrl: canvas.toDataURL('image/png') });
+        btnSubmit.innerText = "已送出，AI 判定中...";
+        turnStatusText.innerHTML = `<div class="spectator-alert">🤖 AI 正在判定你的作答...</div>`;
+      }
+    });
+
+    socket.on('aiJudgeStart', (data) => {
+      if (data && data.studentName === studentName) {
+        turnStatusText.innerHTML = `<div class="spectator-alert">🤖 AI 正在判定你的作答...</div>`;
+        setWritingControlsEnabled(false);
+      }
+    });
+
+    socket.on('aiJudgeResult', (data) => {
+      if (!data || data.studentName !== studentName) return;
+      if (data.decision === 'pass') {
+        turnStatusText.innerHTML = `<div class="turn-alert">✅ AI 判定過關：${data.word || ''}</div>`;
+      } else {
+        turnStatusText.innerHTML = `<div class="spectator-alert">⚠️ AI 退回重寫：${data.reason || '請再寫清楚一點'}</div>`;
+      }
+    });
+
+    socket.on('aiJudgeError', (data) => {
+      if (data && data.studentName === studentName) {
+        turnStatusText.innerHTML = `<div class="spectator-alert">⚠️ AI 判定失敗，請等待老師手動處理</div>`;
+      }
+    });
+
+    // --- 音效引擎 (完整保留) ---
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContext();
+    const masterGain = audioCtx.createGain(); 
+    masterGain.connect(audioCtx.destination);
+    
+    document.getElementById('volControl').addEventListener('input', (e) => {
+      masterGain.gain.value = e.target.value;
+    });
+
+    function playStudentCountdownTick(step) {
+      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+      if (step === 'GO') {
+        playTone(660, 'square', 0.12, 0);
+        playTone(880, 'square', 0.18, 0.08);
+        playTone(1320, 'triangle', 0.28, 0.16);
+      } else {
+        playTone(440, 'sine', 0.12, 0);
+        playTone(220, 'triangle', 0.18, 0.02);
+      }
+    }
+
+    function showCountdownSequence(data = {}) {
+      const steps = data.steps || ['3', '2', '1', 'GO'];
+      const interval = data.interval || 900;
+      const runId = ++countdownRunId;
+      countdownOverlay.classList.add('active');
+      steps.forEach((step, index) => {
+        setTimeout(() => {
+          if (runId !== countdownRunId) return;
+          countdownText.textContent = step;
+          countdownText.className = step === 'GO' ? 'countdown-number go' : 'countdown-number';
+          countdownText.style.animation = 'none';
+          void countdownText.offsetWidth;
+          countdownText.style.animation = '';
+          playStudentCountdownTick(step);
+        }, index * interval);
+      });
+      setTimeout(() => {
+        if (runId !== countdownRunId) return;
+        countdownOverlay.classList.remove('active');
+      }, steps.length * interval + 120);
+    }
+
+    function playTone(freq, type, duration, startTime) {
+      if(audioCtx.state === 'suspended') audioCtx.resume(); 
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime + startTime);
+      gainNode.gain.setValueAtTime(0, audioCtx.currentTime + startTime);
+      gainNode.gain.linearRampToValueAtTime(0.2, audioCtx.currentTime + startTime + 0.05);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + startTime + duration);
+      oscillator.connect(gainNode);
+      gainNode.connect(masterGain);
+      oscillator.start(audioCtx.currentTime + startTime);
+      oscillator.stop(audioCtx.currentTime + startTime + duration);
+    }
+
+    function playWhistle(startTime) {
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1000, audioCtx.currentTime + startTime);
+      osc.frequency.exponentialRampToValueAtTime(2000, audioCtx.currentTime + startTime + 0.2);
+      osc.frequency.setValueAtTime(1400, audioCtx.currentTime + startTime + 0.25);
+      osc.frequency.exponentialRampToValueAtTime(2400, audioCtx.currentTime + startTime + 0.35);
+      osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + startTime + 0.7);
+      gain.gain.setValueAtTime(0, audioCtx.currentTime + startTime);
+      gain.gain.linearRampToValueAtTime(0.4, audioCtx.currentTime + startTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + startTime + 0.2); 
+      gain.gain.setValueAtTime(0, audioCtx.currentTime + startTime + 0.25);
+      gain.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + startTime + 0.3);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + startTime + 0.7); 
+      osc.connect(gain); gain.connect(masterGain);
+      osc.start(audioCtx.currentTime + startTime);
+      osc.stop(audioCtx.currentTime + startTime + 0.7);
+    }
+
+    function playWinSound() {
+      playTone(392.00, 'triangle', 0.15, 0);   
+      playTone(523.25, 'triangle', 0.15, 0.1); 
+      playTone(659.25, 'triangle', 0.15, 0.2); 
+      playTone(783.99, 'triangle', 0.4,  0.3); 
+      playTone(523.25, 'sine', 0.6, 0.3);      
+      playTone(659.25, 'sine', 0.6, 0.3); 
+      playTone(1046.50, 'sine', 0.6, 0.3);
+      playWhistle(0.6);
+    }
+
+    function playFailSound() {
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+      const boing = audioCtx.createOscillator();
+      const boingGain = audioCtx.createGain();
+      boing.type = 'sine';
+      boing.frequency.setValueAtTime(150, audioCtx.currentTime);
+      boing.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+      boing.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.3);
+      boingGain.gain.setValueAtTime(0, audioCtx.currentTime);
+      boingGain.gain.linearRampToValueAtTime(0.8, audioCtx.currentTime + 0.05);
+      boingGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+      boing.connect(boingGain); boingGain.connect(masterGain);
+      boing.start(audioCtx.currentTime); boing.stop(audioCtx.currentTime + 0.3);
+
+      function playWah(freq, delay) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime + delay);
+        osc.frequency.exponentialRampToValueAtTime(freq * 0.8, audioCtx.currentTime + delay + 0.3);
+        gain.gain.setValueAtTime(0, audioCtx.currentTime + delay);
+        gain.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + delay + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + delay + 0.35);
+        osc.connect(gain); gain.connect(masterGain);
+        osc.start(audioCtx.currentTime + delay); osc.stop(audioCtx.currentTime + delay + 0.35);
+      }
+      playWah(311.13, 0.3); playWah(293.66, 0.7); playWah(277.18, 1.1);
+
+      const fart = audioCtx.createOscillator();
+      const fartGain = audioCtx.createGain();
+      fart.type = 'sawtooth';
+      fart.frequency.setValueAtTime(261.63, audioCtx.currentTime + 1.5);
+      fart.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 2.5); 
+      fartGain.gain.setValueAtTime(0, audioCtx.currentTime + 1.5);
+      fartGain.gain.linearRampToValueAtTime(0.6, audioCtx.currentTime + 1.6);
+      fartGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 2.5);
+      fart.connect(fartGain); fartGain.connect(masterGain);
+      fart.start(audioCtx.currentTime + 1.5); fart.stop(audioCtx.currentTime + 2.5);
+    }
+
+    // [新增] 可見閃電劈下特效
+    function showLightningBolt() {
+      // 背景閃白
+      const bgFlash = document.createElement('div');
+      bgFlash.className = 'lightning-bg-flash';
+      document.body.appendChild(bgFlash);
+
+      // 閃電 SVG（鋸齒形閃電，由頂部劈到底部）
+      const wrapper = document.createElement('div');
+      wrapper.className = 'lightning-bolt-wrapper';
+      wrapper.innerHTML = `
+        <svg class="lightning-bolt-svg" width="120" height="100vh" viewBox="0 0 120 800" xmlns="http://www.w3.org/2000/svg">
+          <!-- 外層光暈 -->
+          <polyline points="60,0 80,160 50,160 85,360 40,360 90,560 30,560 75,760 60,800"
+            fill="none" stroke="#fff9c4" stroke-width="28" stroke-linejoin="round" stroke-linecap="round" opacity="0.5"/>
+          <!-- 中層光 -->
+          <polyline points="60,0 80,160 50,160 85,360 40,360 90,560 30,560 75,760 60,800"
+            fill="none" stroke="#ffe033" stroke-width="14" stroke-linejoin="round" stroke-linecap="round"/>
+          <!-- 核心白線 -->
+          <polyline points="60,0 80,160 50,160 85,360 40,360 90,560 30,560 75,760 60,800"
+            fill="none" stroke="white" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+          <!-- 撞擊光圈 -->
+          <circle cx="60" cy="800" r="36" fill="none" stroke="#ffe033" stroke-width="10" opacity="0.7"/>
+          <circle cx="60" cy="800" r="20" fill="#fffde7" opacity="0.8"/>
+        </svg>`;
+      document.body.appendChild(wrapper);
+
+      setTimeout(() => { wrapper.remove(); bgFlash.remove(); }, 1100);
+    }
+
+    // [新增] 冠軍動畫（學生端）
+    const winnerOverlay = document.getElementById('winnerOverlay');
+    const winnerNameDisplay = document.getElementById('winnerNameDisplay');
+
+    socket.on('gameWinner', (winnerName) => {
+      const name = winnerName || '所有人';
+      winnerNameDisplay.textContent = name;
+      winnerOverlay.classList.add('active');
+      // 彩帶爆炸
+      function burstConfetti() {
+        confetti({ particleCount: 100, angle: 60,  spread: 80, origin: { x: 0,   y: 0.6 } });
+        confetti({ particleCount: 100, angle: 120, spread: 80, origin: { x: 1,   y: 0.6 } });
+        confetti({ particleCount: 60,  angle: 90,  spread: 120,origin: { x: 0.5, y: 0.3 } });
+      }
+      burstConfetti();
+      setTimeout(burstConfetti, 800);
+      setTimeout(burstConfetti, 1800);
+      playWinSound();
+      setTimeout(playWinSound, 1000);
+    });
+
+    // 老師重置回大廳：舊學生頁面停止連線，避免清空名單後又自動回來。
+    socket.on('gameReset', () => {
+      if (winnerOverlay) winnerOverlay.classList.remove('active');
+      countdownRunId++;
+      countdownOverlay.classList.remove('active');
+      lobbyScreen.style.display = 'flex';
+      gameScreen.style.display = 'none';
+      updateLobbyList([], {});
+      socket.disconnect();
+    });
+
+    // [新增] 老師觸發完整重置：關閉覆蓋層、清除名字、重新加入
+    socket.on('fullReset', () => {
+      if (winnerOverlay) winnerOverlay.classList.remove('active');
+      countdownRunId++;
+      countdownOverlay.classList.remove('active');
+      socket.disconnect();
+      setTimeout(() => {
+        window.location.reload();
+      }, 300);
+    });
+
+    socket.on('playAnimation', (type) => {
+      if (type === 'pass') {
+        playWinSound();
+        confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ['#26ccff', '#a25afd', '#ff5e7e', '#88ff5a', '#fcff42'] });
+      } else if (type === 'fail') {
+        playFailSound();
+        
+        // 7. 隨機多樣化失敗演出
+        const rand = Math.random();
+        if (rand < 0.33) {
+          // 演出 1：大字哇哇哇
+          const failText = document.getElementById('failWa');
+          failText.style.animation = "waShake 1s forwards";
+          setTimeout(() => failText.style.animation = "", 1500);
+        } else if (rand < 0.66) {
+          // [修改] 演出 2：可見閃電劈下
+          showLightningBolt();
+        } else {
+          // 演出 3：原有的烏鴉飛過
+          const wrapper = document.createElement('div');
+          wrapper.className = 'crows-wrapper';
+          const crowSVG = `<svg class="anime-crow-svg" viewBox="0 0 280 200" width="280" height="200"><path d="M 120 110 L 170 90 L 160 130 Z" fill="#222" /><path d="M 90 100 Q 130 50 170 60 L 140 80 L 160 90 L 130 100 L 150 110 L 110 110 Z" fill="#111" stroke="#333" stroke-width="2" /><ellipse cx="90" cy="110" rx="45" ry="35" fill="#222" /><circle cx="65" cy="80" r="30" fill="#222" /><path d="M 40 80 L 5 95 L 45 95 Z" fill="#ffb300" /><path d="M 45 95 L 10 105 L 50 100 Z" fill="#ff9900" /><path d="M 85 105 Q 110 60 140 70 L 120 85 L 145 95 L 115 105 L 130 115 L 90 120 Z" fill="#1a1a1a" stroke="#444" stroke-width="2" /><circle cx="55" cy="75" r="9" fill="#eee" /><line x1="45" y1="75" x2="65" y2="75" stroke="#111" stroke-width="3" /><circle cx="55" cy="78" r="3" fill="#111" /><path d="M 80 40 L 80 65 M 92 35 L 92 65 M 104 40 L 104 65" stroke="#9c27b0" stroke-width="3.5" stroke-linecap="round" /><text x="120" y="30" font-size="35" fill="#333" font-weight="bold">...</text></svg>`;
+          wrapper.innerHTML = `<div class="anime-crow-container crow-1">${crowSVG}</div><div class="anime-crow-container crow-2">${crowSVG}</div><div class="anime-crow-container crow-3">${crowSVG}</div>`;
+          document.body.appendChild(wrapper);
+          setTimeout(() => { wrapper.remove(); }, 3000);
+        }
+      }
+    });
+  </script>
+</body>
+</html>
